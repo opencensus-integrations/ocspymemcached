@@ -41,6 +41,7 @@ import net.spy.memcached.internal.GetCompletionListener;
 import net.spy.memcached.internal.GetFuture;
 import net.spy.memcached.internal.OperationCompletionListener;
 import net.spy.memcached.internal.OperationFuture;
+import net.spy.memcached.ops.CASOperationStatus;
 import net.spy.memcached.ops.CancelledOperationStatus;
 import net.spy.memcached.ops.OperationStatus;
 
@@ -198,7 +199,7 @@ public class Observability {
 
     // VisibleForTesting
     TrackingOperation(
-        String method, StatsRecorder statsRecorder, Tagger tagger, Tracer tracer, String[] keys) {
+        String method, StatsRecorder statsRecorder, Tagger tagger, Tracer tracer, String... keys) {
       startTimeNs = System.nanoTime();
       span = tracer.spanBuilder(method).startSpan();
       this.method = method;
@@ -287,17 +288,7 @@ public class Observability {
     @Override
     public void onComplete(GetFuture<?> future) {
       OperationStatus status = future.getStatus();
-      if (!status.isSuccess()) {
-        String message = status.getMessage();
-
-        if (status instanceof CancelledOperationStatus) {
-          this.trackingOperation.setStatusAndError(
-              Status.CANCELLED.withDescription(message), message);
-        } else {
-          this.trackingOperation.setStatusAndError(
-              Status.UNKNOWN.withDescription(message), message);
-        }
-      }
+      translateAndSetSpanStatusFromOperationStatus(this.trackingOperation, status);
 
       // Unconditionally end the trackingOperation.
       this.trackingOperation.end();
@@ -319,17 +310,7 @@ public class Observability {
     @Override
     public void onComplete(OperationFuture<?> future) {
       OperationStatus status = future.getStatus();
-      if (!status.isSuccess()) {
-        String message = status.getMessage();
-
-        if (status instanceof CancelledOperationStatus) {
-          this.trackingOperation.setStatusAndError(
-              Status.CANCELLED.withDescription(message), message);
-        } else {
-          this.trackingOperation.setStatusAndError(
-              Status.UNKNOWN.withDescription(message), message);
-        }
-      }
+      translateAndSetSpanStatusFromOperationStatus(this.trackingOperation, status);
 
       // Unconditionally end the trackingOperation.
       this.trackingOperation.end();
@@ -351,18 +332,8 @@ public class Observability {
     @Override
     public void onComplete(BulkGetFuture<?> future) {
       OperationStatus status = future.getStatus();
-      if (!status.isSuccess()) {
-        String message = status.getMessage();
-
-        if (status instanceof CancelledOperationStatus) {
-          this.trackingOperation.setStatusAndError(
-              Status.CANCELLED.withDescription(message), message);
-        } else {
-          this.trackingOperation.setStatusAndError(
-              Status.UNKNOWN.withDescription(message), message);
-        }
-      }
-
+      System.err.println("Status:: " + status);
+      translateAndSetSpanStatusFromOperationStatus(this.trackingOperation, status);
       // Unconditionally end the trackingOperation.
       this.trackingOperation.end();
     }
@@ -371,5 +342,22 @@ public class Observability {
   static BulkGetFutureCompletionListener createBulkGetFutureCompletionListener(
       TrackingOperation trackingOperation) {
     return new BulkGetFutureCompletionListener(trackingOperation);
+  }
+
+  static void translateAndSetSpanStatusFromOperationStatus(
+      TrackingOperation trackingOperation, OperationStatus status) {
+    if (status.isSuccess()) return;
+
+    Status spanStatus;
+    if (status instanceof CancelledOperationStatus) {
+      spanStatus = Status.CANCELLED;
+    } else if (status instanceof CASOperationStatus) {
+      spanStatus = Status.FAILED_PRECONDITION;
+    } else {
+      spanStatus = Status.UNKNOWN;
+    }
+
+    String message = status.getMessage();
+    trackingOperation.setStatusAndError(spanStatus.withDescription(message), message);
   }
 }
