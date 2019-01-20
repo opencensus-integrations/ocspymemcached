@@ -236,8 +236,10 @@ public class Observability {
         MeasureMap measureMap = statsRecorder.newMeasureMap();
 
         // Record the key length if applicable.
-        for (String key : this.keys) {
-          if (key != null) measureMap.put(Observability.MEASURE_LENGTH, key.length());
+        if (this.keys != null) {
+          for (String key : this.keys) {
+            if (key != null) measureMap.put(Observability.MEASURE_LENGTH, key.length());
+          }
         }
 
         // Record the latency.

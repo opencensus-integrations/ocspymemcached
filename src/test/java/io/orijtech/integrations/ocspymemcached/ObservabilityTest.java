@@ -226,4 +226,11 @@ public class ObservabilityTest {
     Mockito.verify(mockMeasureMap, Mockito.times(1)).record(any(TagContext.class));
     Mockito.verify(mockSpan, Mockito.times(1)).end();
   }
+
+  @Test
+  public void trackingOperation_operationFutureListener_nullKeysNoPanics() {
+    TrackingOperation trackingOperation =
+        new TrackingOperation("net.spy.memcached.MemcachedClient.foo-with-null-keys");
+    trackingOperation.end();
+  }
 }
